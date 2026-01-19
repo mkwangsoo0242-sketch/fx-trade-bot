@@ -12,6 +12,22 @@
 #include <Trade\PositionInfo.mqh>
 #include <Trade\AccountInfo.mqh>
 
+void SendStatus() {
+   string pos_json = ""; int pCount = 0;
+   for(int i=0; i<PositionsTotal(); i++) {
+      ulong t = PositionGetTicket(i);
+      if(PositionSelectByTicket(t) && PositionGetInteger(POSITION_MAGIC) == Inp_MagicNum) {
+         if(pCount > 0) pos_json += ",";
+         pos_json += "{\"ticket\":"+IntegerToString(t)+",\"symbol\":\""+_Symbol+"\",\"time\":\""+TimeToString(PositionGetInteger(POSITION_TIME))+"\",\"type\":\""+(PositionGetInteger(POSITION_TYPE)==POSITION_TYPE_BUY?"buy":"sell")+"\",\"vol\":"+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+",\"open\":"+DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN),5)+",\"sl\":"+DoubleToString(PositionGetDouble(POSITION_SL),5)+",\"tp\":"+DoubleToString(PositionGetDouble(POSITION_TP),5)+",\"cur\":"+DoubleToString(PositionGetDouble(POSITION_PRICE_CURRENT),5)+",\"pnl\":"+DoubleToString(PositionGetDouble(POSITION_PROFIT),2)+"}";
+         pCount++;
+      }
+   }
+   string json = "{\"strategy\":\"Golden USDJPY\",\"balance\":"+DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),2)+",\"equity\":"+DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY),2)+",\"margin\":"+DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN),2)+",\"free_margin\":"+DoubleToString(AccountInfoDouble(ACCOUNT_FREEMARGIN),2)+",\"margin_level\":"+DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_LEVEL),2)+",\"positions\":["+pos_json+"]}";
+   char data[], result[]; string hd="Content-Type: application/json\r\n", rh;
+   StringToCharArray(json, data, 0, WHOLE_ARRAY, CP_UTF8);
+   WebRequest("POST", "http://172.21.22.224:5555", hd, 50, data, result, rh);
+}
+
 //--- [최종 분석] 2025년 변동성 돌파 및 연수익 100% 타겟 설정
 input group             "ULTIMATE BEAST SETTINGS"
 input int      Inp_BreakoutPeriod = 48;       // 48시간 고저점 돌파 (가장 강력한 시그널)
@@ -44,13 +60,17 @@ int OnInit()
    if(h_atr == INVALID_HANDLE || h_ema == INVALID_HANDLE) return(INIT_FAILED);
 
    m_trade.SetExpertMagicNumber(Inp_MagicNum);
+   EventSetTimer(1);
    return(INIT_SUCCEEDED);
   }
+
+void OnTimer() { SendStatus(); }
 
 void OnDeinit(const int reason)
   {
    IndicatorRelease(h_atr);
    IndicatorRelease(h_ema);
+   EventKillTimer();
   }
 
 //+------------------------------------------------------------------+
@@ -58,6 +78,9 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
+   //--- 실시간 전송
+   SendStatus();
+
    if(GetActivePositions() > 0) return;
 
    // 지표 값 수집

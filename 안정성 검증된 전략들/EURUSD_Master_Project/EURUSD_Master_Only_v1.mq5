@@ -12,6 +12,22 @@
 #include <Trade\PositionInfo.mqh>
 #include <Trade\AccountInfo.mqh>
 
+void SendStatus() {
+   string pos_json = ""; int pCount = 0;
+   for(int i=0; i<PositionsTotal(); i++) {
+      ulong t = PositionGetTicket(i);
+      if(PositionSelectByTicket(t) && PositionGetInteger(POSITION_MAGIC) == InpMagicNum) {
+         if(pCount > 0) pos_json += ",";
+         pos_json += "{\"ticket\":"+IntegerToString(t)+",\"symbol\":\""+_Symbol+"\",\"time\":\""+TimeToString(PositionGetInteger(POSITION_TIME))+"\",\"type\":\""+(PositionGetInteger(POSITION_TYPE)==POSITION_TYPE_BUY?"buy":"sell")+"\",\"vol\":"+DoubleToString(PositionGetDouble(POSITION_VOLUME),2)+",\"open\":"+DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN),5)+",\"sl\":"+DoubleToString(PositionGetDouble(POSITION_SL),5)+",\"tp\":"+DoubleToString(PositionGetDouble(POSITION_TP),5)+",\"cur\":"+DoubleToString(PositionGetDouble(POSITION_PRICE_CURRENT),5)+",\"pnl\":"+DoubleToString(PositionGetDouble(POSITION_PROFIT),2)+"}";
+         pCount++;
+      }
+   }
+   string json = "{\"strategy\":\"EURUSD Master Only\",\"balance\":"+DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE),2)+",\"equity\":"+DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY),2)+",\"margin\":"+DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN),2)+",\"free_margin\":"+DoubleToString(AccountInfoDouble(ACCOUNT_FREEMARGIN),2)+",\"margin_level\":"+DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_LEVEL),2)+",\"positions\":["+pos_json+"]}";
+   char data[], result[]; string hd="Content-Type: application/json\r\n", rh;
+   StringToCharArray(json, data, 0, WHOLE_ARRAY, CP_UTF8);
+   WebRequest("POST", "http://172.21.22.224:5555", hd, 50, data, result, rh);
+}
+
 //--- INPUT PARAMETERS (Aggressive Breakout: 2021-2025 ALL Profit)
 input group             "Strategy Settings"
 input int               InpStartHour   = 13;           // NY Open Breakout (13:00 UTC)
@@ -28,11 +44,14 @@ bool           traded_today = false;
 int OnInit() {
    if(!symbolInfo.Name(Symbol())) return(INIT_FAILED);
    trade.SetExpertMagicNumber(InpMagicNum);
+   EventSetTimer(1);
    Print("🚀 EURUSD Golden Master V2 (NY Beast) Initialized.");
    return(INIT_SUCCEEDED);
 }
+void OnTimer() { SendStatus(); }
 
 void OnTick() {
+   SendStatus();
    MqlDateTime dt;
    TimeCurrent(dt);
    
